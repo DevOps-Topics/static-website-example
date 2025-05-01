@@ -23,7 +23,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout([$class: 'GitSCM',
-                          branches: [[name: "*/${params.BRANCH}"]],
+                          branches: [[name: "*/${params.TAG}"]],
                           userRemoteConfigs: [[url: 'https://github.com/DevOps-Topics/static-website-example.git']]])
             }
         }
