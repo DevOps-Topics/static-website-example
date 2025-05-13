@@ -1,37 +1,56 @@
-pipeline {
-    agent any
+// this has the structure on how to deploy the docker to by stopping the previous running container and will automatically update the tags with build number.
 
-    parameters {
-        string(
-            name: 'TAG',
-            defaultValue: 'origin/staging',
-            description: 'For example, to select a staging branch write "origin/staging".\nTo select tag v2014.4.1 write "v2014.4.1".'
-        )
-        string(
-            name: 'NODE_ENV',
-            defaultValue: 'production',
-            description: 'Node environment for the build.'
-        )
-        choice(
-            name: 'DEPLOY_CONFIG_BRANCH',
-            choices: ['preprod', 'master'],
-            description: 'If empty, it will skip all the custom repo and build LMS the old way.'
-        )
+
+pipeline {
+    agent any 
+
+    environment {
+        IMAGE_NAME = "village-app"
+        CONTAINER_NAME = "village-app"
     }
 
     stages {
         stage('Checkout') {
             steps {
-                checkout([$class: 'GitSCM',
-                          branches: [[name: "*/${params.TAG}"]],
-                          userRemoteConfigs: [[url: 'https://github.com/DevOps-Topics/static-website-example.git']]])
+                checkout scm
             }
         }
-        stage('Example') {
+
+        stage('Stop Previous Container') {
             steps {
-                echo "TAG: ${params.TAG}"
-                echo "NODE_ENV: ${params.NODE_ENV}"
-                echo "DEPLOY_CONFIG_BRANCH: ${params.DEPLOY_CONFIG_BRANCH}"
+                script {
+                    sh """
+                    echo "Checking for existing container..."
+                    if [ \$(docker ps -q -f name=${CONTAINER_NAME}) ]; then 
+                        echo "Stopping and removing running container..."
+                        docker stop ${CONTAINER_NAME}
+                        docker rm ${CONTAINER_NAME}
+                    elif [ \$(docker ps -aq -f name=${CONTAINER_NAME}) ]; then
+                        echo "Container exists but not running — removing it..."
+                        docker rm ${CONTAINER_NAME}
+                    else 
+                        echo "No existing container found."
+                    fi
+                    """
+                }
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                script {
+                    docker.build("${IMAGE_NAME}:${BUILD_NUMBER}")
+                }
+            }
+        }
+
+        stage('Run New Container') {
+            steps {
+                script {
+                    sh """
+                    docker run -d -p 8181:80 --restart unless-stopped --name ${CONTAINER_NAME} ${IMAGE_NAME}:${BUILD_NUMBER}
+                    """
+                }
             }
         }
     }
